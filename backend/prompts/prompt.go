@@ -67,17 +67,9 @@ func (m *Manager) Keys() []string {
 	return keys
 }
 
-func (m *Manager) Run(ctx context.Context, key string, params map[string]any, opts ...RunOption) (string, error) {
-	tpl := m.Get(key)
-
+func (m *Manager) runWithConfig(ctx context.Context, tpl string, params map[string]any, cfg config.LLMConfig) (string, error) {
 	if m.executor == nil {
 		return "", fmt.Errorf("prompts: executor not set on Manager")
-	}
-
-	var cfg config.LLMConfig
-	defaultLLMConfigOption(ctx, &cfg)
-	for _, o := range opts {
-		o(ctx, &cfg)
 	}
 
 	rendered := fasttemplate.New(tpl, "{", "}").ExecuteFuncString(func(w io.Writer, tag string) (int, error) {
@@ -89,6 +81,17 @@ func (m *Manager) Run(ctx context.Context, key string, params map[string]any, op
 	})
 
 	return m.executor.Execute(ctx, rendered, cfg)
+}
+
+func (m *Manager) Run(ctx context.Context, key string, params map[string]any, opts ...RunOption) (string, error) {
+	tpl := m.Get(key)
+
+	var cfg config.LLMConfig
+	for _, o := range opts {
+		o(ctx, &cfg)
+	}
+
+	return m.runWithConfig(ctx, tpl, params, cfg)
 }
 
 var (
@@ -128,5 +131,12 @@ func Run(ctx context.Context, key string, params map[string]any, opts ...RunOpti
 	if exec == nil {
 		return "", fmt.Errorf("prompts: default executor not set; call SetDefaultExecutor first")
 	}
-	return m.Run(ctx, key, params, opts...)
+
+	tpl := m.Get(key)
+	var cfg config.LLMConfig
+	defaultLLMConfigOption(ctx, &cfg)
+	for _, o := range opts {
+		o(ctx, &cfg)
+	}
+	return m.runWithConfig(ctx, tpl, params, cfg)
 }
