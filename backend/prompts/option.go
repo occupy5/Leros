@@ -46,6 +46,6 @@ var defaultLLMConfigOption = func(ctx context.Context, cfg *config.LLMConfig) {
 		cfg.Provider = lm.Provider
 		cfg.Model = lm.ModelName
 		cfg.BaseURL = lm.BaseURL
-		cfg.APIKey = lm.APIKeyMasked
+		cfg.APIKey = lm.APIKeyEncrypted
 	}
 }

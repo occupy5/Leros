@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -290,7 +291,7 @@ func (s *sessionService) AddMessage(ctx context.Context, sessionID uint, req *co
 		return nil, err
 	}
 
-	if session.OrgID > 0 {
+	if session.OrgID > 0 && session.MessageCount < 3 {
 		topic, err := dm.SessionMessageRequestSubject(session.OrgID, session.SessionID)
 		if err != nil {
 			logs.WarnContextf(ctx, "failed to build title request subject: %v", err)
@@ -356,7 +357,7 @@ func (s *sessionService) tryAutoUpdateTitle(ctx context.Context, session *types.
 	if session.TitleManuallySet {
 		return
 	}
-	if session.Title != "" && session.Title != "新会话" {
+	if session.MessageCount >= 3 {
 		return
 	}
 
@@ -366,14 +367,25 @@ func (s *sessionService) tryAutoUpdateTitle(ctx context.Context, session *types.
 }
 
 func (s *sessionService) renameSession(ctx context.Context, session *types.Session, content string) error {
-	title, err := prompts.Run(ctx, prompts.KeySessionTitle, map[string]any{"content": content})
+	title, err := prompts.Run(ctx, prompts.KeySessionTitle, map[string]any{
+		"content":       content,
+		"current_title": session.Title,
+	})
 	if err != nil {
-		logs.WarnContextf(ctx, "LLM title generation failed, fallback to truncation: %v", err)
+		logs.WarnContextf(ctx, "LLM title generation failed, fallback: %v", err)
+		if session.Title != "" && session.Title != "新会话" {
+			return nil
+		}
 		runes := []rune(content)
 		if len(runes) > 100 {
 			title = string(runes[:100])
 		} else {
 			title = content
+		}
+	} else {
+		title = strings.TrimSpace(title)
+		if title == "KEEP" {
+			return nil
 		}
 	}
 	session.Title = title
@@ -390,7 +402,6 @@ func (s *sessionService) HandleSessionTitleRequest(ctx context.Context, req *con
 		return nil
 	}
 
-	ctx = auth.WithContext(ctx, &auth.Caller{OrgID: session.OrgID}, nil)
 	s.tryAutoUpdateTitle(ctx, session, req.Content)
 	return nil
 }
