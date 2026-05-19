@@ -294,14 +294,10 @@ func (s *sessionService) AddMessage(ctx context.Context, sessionID uint, req *co
 	if session.OrgID > 0 {
 		topic, err := dm.SessionMessageRequestSubject(session.OrgID, session.SessionID)
 		if err != nil {
-			logs.WarnContextf(ctx, "failed to build title request subject: %v", err)
+			logs.WarnContextf(ctx, "failed to build message request subject: %v", err)
 		} else {
-			titleReq := &contract.SessionTitleRequest{
-				SessionID: session.SessionID,
-				Content:   req.Content,
-			}
-			if err := s.eventbus.Publish(ctx, topic, titleReq); err != nil {
-				logs.WarnContextf(ctx, "failed to publish title update request: %v", err)
+			if err := s.eventbus.Publish(ctx, topic, message); err != nil {
+				logs.WarnContextf(ctx, "failed to publish message to eventbus: %v", err)
 			}
 		}
 	}
@@ -408,17 +404,25 @@ func (s *sessionService) buildRecentMessages(ctx context.Context, sessionID stri
 	return sb.String()
 }
 
-func (s *sessionService) HandleSessionTitleRequest(ctx context.Context, req *contract.SessionTitleRequest) error {
-	session, err := db.GetSessionBySessionID(ctx, s.db, req.SessionID)
+func (s *sessionService) HandleSessionTitleRequest(ctx context.Context, messageID uint) error {
+	message, err := db.GetMessageByID(ctx, s.db, messageID)
 	if err != nil {
-		return fmt.Errorf("get session %s: %w", req.SessionID, err)
+		return fmt.Errorf("get message %d: %w", messageID, err)
+	}
+	if message == nil {
+		return nil
+	}
+
+	session, err := db.GetSessionBySessionID(ctx, s.db, message.SessionID)
+	if err != nil {
+		return fmt.Errorf("get session %s: %w", message.SessionID, err)
 	}
 	if session == nil {
 		return nil
 	}
 
-	logs.DebugContextf(ctx, "handling session title request for session %s: content=%s", req.SessionID, req.Content)
-	s.tryAutoUpdateTitle(ctx, session, req.Content)
+	logs.DebugContextf(ctx, "handling session title request for session %s: content=%s", session.SessionID, message.Content)
+	s.tryAutoUpdateTitle(ctx, session, message.Content)
 	return nil
 }
 
