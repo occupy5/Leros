@@ -16,6 +16,7 @@ type LLMModel struct {
 	Provider    string                 `json:"provider"`
 	Model       string                 `json:"model"`
 	BaseURL     string                 `json:"base_url"`
+	BaseURLHasV1 bool                 `json:"base_url_has_v1"`
 	APIKey      string                 `json:"api_key"`
 	MaxTokens   int                    `json:"max_tokens"`
 	Temperature float64                `json:"temperature"`
@@ -82,9 +83,10 @@ type TestLLMModelRequest struct {
 
 // TestLLMModelResponse 测试LLM模型配置响应
 type TestLLMModelResponse struct {
-	Success    bool   `json:"success"`
-	StatusCode int    `json:"status_code"`
-	Message    string `json:"message"`
-	Endpoint   string `json:"endpoint"`
-	LatencyMS  int64  `json:"latency_ms"`
+	Success      bool   `json:"success"`
+	StatusCode   int    `json:"status_code"`
+	Message      string `json:"message"`
+	Endpoint     string `json:"endpoint"`
+	LatencyMS    int64  `json:"latency_ms"`
+	BaseURLHasV1 bool   `json:"base_url_has_v1"`
 }
