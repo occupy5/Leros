@@ -173,8 +173,5 @@ func (s *recordingSessionService) FailedSessionMessage(_ context.Context, req *c
 func (s *recordingSessionService) HandleSessionTitleRequest(context.Context, string) error {
 	return nil
 }
-func (s *recordingSessionService) NewMessage(context.Context, *contract.NewMessageRequest) (*contract.NewMessageResponse, error) {
-	return nil, nil
-}
 
 var _ contract.SessionService = (*recordingSessionService)(nil)
