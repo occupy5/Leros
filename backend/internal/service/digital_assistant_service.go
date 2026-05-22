@@ -194,10 +194,10 @@ func (s *digitalAssistantService) ListDigitalAssistant(ctx context.Context, req 
 
 	opt := types.NewPageQuery(*caller, req.Offset, req.Limit)
 	if req.Status != nil {
-		opt.Filters = append(opt.Filters, types.Filter{Field: "status", Value: []string{*req.Status}})
+		opt.AddFilter("status", *req.Status)
 	}
 	if req.Keyword != nil && *req.Keyword != "" {
-		opt.Filters = append(opt.Filters, types.Filter{Field: "keyword", Value: []string{*req.Keyword}})
+		opt.AddFilter("keyword", *req.Keyword)
 	}
 
 	entities, total, err := db.ListDigitalAssistant(ctx, s.db, opt)

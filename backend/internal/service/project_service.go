@@ -178,10 +178,10 @@ func (s *projectService) ListProjects(ctx context.Context, req *contract.ListPro
 	opt := types.NewPageQuery(*caller, req.Offset, req.Limit)
 	opt.ListAll = req.ListAll
 	if req.Keyword != nil && *req.Keyword != "" {
-		opt.Filters = append(opt.Filters, types.Filter{Field: "name", Value: []string{*req.Keyword}})
+		opt.AddFilter("name", *req.Keyword)
 	}
 	if req.Status != nil && *req.Status != "" {
-		opt.Filters = append(opt.Filters, types.Filter{Field: "status", Value: []string{*req.Status}})
+		opt.AddFilter("status", *req.Status)
 	}
 
 	projects, total, err := db.ListProjects(ctx, s.db, opt)

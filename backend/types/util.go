@@ -86,3 +86,15 @@ func NewPageQuery(caller Caller, offset, limit int) *PageQuery {
 		Pagination: Pagination{Offset: offset, Limit: limit},
 	}
 }
+
+// AddFilter 链式添加过滤条件。
+func (pq *PageQuery) AddFilter(field string, values ...string) *PageQuery {
+	pq.Filters = append(pq.Filters, Filter{Field: field, Value: values})
+	return pq
+}
+
+// AddExactFilter 链式添加精确过滤条件。
+func (pq *PageQuery) AddExactFilter(field string, values ...string) *PageQuery {
+	pq.Filters = append(pq.Filters, Filter{Field: field, Value: values, ExactMatch: true})
+	return pq
+}

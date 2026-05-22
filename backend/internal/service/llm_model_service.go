@@ -221,13 +221,13 @@ func (s *llmModelService) ListLLMModels(ctx context.Context, req *contract.ListL
 
 	opt := types.NewPageQuery(*caller, req.Offset, req.Limit)
 	if req.Provider != nil && *req.Provider != "" {
-		opt.Filters = append(opt.Filters, types.Filter{Field: "provider", Value: []string{*req.Provider}})
+		opt.AddFilter("provider", *req.Provider)
 	}
 	if req.Status != nil && *req.Status != "" {
-		opt.Filters = append(opt.Filters, types.Filter{Field: "status", Value: []string{*req.Status}})
+		opt.AddFilter("status", *req.Status)
 	}
 	if req.Keyword != nil && *req.Keyword != "" {
-		opt.Filters = append(opt.Filters, types.Filter{Field: "keyword", Value: []string{*req.Keyword}})
+		opt.AddFilter("keyword", *req.Keyword)
 	}
 
 	models, total, err := db.ListLLMModels(ctx, s.db, opt)
