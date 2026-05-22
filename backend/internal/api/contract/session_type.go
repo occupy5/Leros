@@ -120,6 +120,7 @@ type CompleteSessionMessageRequest struct {
 type NewMessageRequest struct {
 	Content     string `json:"content" binding:"required"`
 	ProjectID   string `json:"project_id,omitempty"`
+	TaskID      string `json:"task_id,omitempty"`
 	AssistantID uint   `json:"assistant_id,omitempty"`
 	Title       string `json:"title,omitempty"`
 	MessageType string `json:"message_type,omitempty"`

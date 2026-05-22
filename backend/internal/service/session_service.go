@@ -486,29 +486,42 @@ func (s *sessionService) NewMessage(ctx context.Context, req *contract.NewMessag
 		}
 	}
 
-	taskTitle := req.Title
-	if taskTitle == "" {
-		runes := []rune(req.Content)
-		if len(runes) > 50 {
-			taskTitle = string(runes[:50])
-		} else {
-			taskTitle = req.Content
-		}
-	}
+	var task *types.Task
 
-	taskID := fmt.Sprintf("task_%s", snowflake.GenerateIDBase58())
-	task := &types.Task{
-		PublicID:    taskID,
-		OrgID:       caller.OrgID,
-		OwnerID:     caller.Uin,
-		ProjectID:   project.ID,
-		TaskType:    types.TaskTypeGeneral,
-		Title:       taskTitle,
-		Description: req.Content,
-		Status:      string(types.TaskStatusCreated),
-	}
-	if err := db.CreateTask(ctx, s.db, task); err != nil {
-		return nil, fmt.Errorf("create task: %w", err)
+	if req.TaskID != "" {
+		t, err := db.GetTaskByPublicID(ctx, s.db, req.TaskID)
+		if err != nil {
+			return nil, err
+		}
+		if t == nil {
+			return nil, errors.New("task not found")
+		}
+		task = t
+	} else {
+		taskTitle := req.Title
+		if taskTitle == "" {
+			runes := []rune(req.Content)
+			if len(runes) > 50 {
+				taskTitle = string(runes[:50])
+			} else {
+				taskTitle = req.Content
+			}
+		}
+
+		taskID := fmt.Sprintf("task_%s", snowflake.GenerateIDBase58())
+		task = &types.Task{
+			PublicID:    taskID,
+			OrgID:       caller.OrgID,
+			OwnerID:     caller.Uin,
+			ProjectID:   project.ID,
+			TaskType:    types.TaskTypeGeneral,
+			Title:       taskTitle,
+			Description: req.Content,
+			Status:      string(types.TaskStatusCreated),
+		}
+		if err := db.CreateTask(ctx, s.db, task); err != nil {
+			return nil, fmt.Errorf("create task: %w", err)
+		}
 	}
 
 	taskSessionID := fmt.Sprintf("sess_%s", snowflake.GenerateIDBase58())
@@ -522,7 +535,7 @@ func (s *sessionService) NewMessage(ctx context.Context, req *contract.NewMessag
 		ProjectID:            &project.ID,
 		TaskID:               &task.ID,
 		Status:               string(types.SessionStatusActive),
-		Title:                taskTitle,
+		Title:                task.Title,
 	}
 	if err := db.CreateSession(ctx, s.db, taskSession); err != nil {
 		return nil, fmt.Errorf("create task session: %w", err)
