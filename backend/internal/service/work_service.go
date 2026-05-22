@@ -8,11 +8,11 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/insmtx/Leros/backend/internal/agent/runtime/events"
 	"github.com/insmtx/Leros/backend/internal/api/auth"
 	"github.com/insmtx/Leros/backend/internal/api/contract"
 	"github.com/insmtx/Leros/backend/internal/infra/db"
 	eventbus "github.com/insmtx/Leros/backend/internal/infra/mq"
+	"github.com/insmtx/Leros/backend/internal/worker/protocol"
 	"github.com/insmtx/Leros/backend/pkg/dm"
 	"github.com/insmtx/Leros/backend/types"
 	"github.com/ygpkg/yg-go/encryptor/snowflake"
@@ -246,29 +246,29 @@ func (s *workService) publishWorkerTask(ctx context.Context, session *types.Sess
 		return fmt.Errorf("failed to construct worker task topic: %w", err)
 	}
 
-	messagePayload := events.WorkerTaskMessage{
+	messagePayload := protocol.WorkerTaskMessage{
 		ID:        fmt.Sprintf("msg_%d_%d", session.ID, message.Sequence),
-		Type:      events.MessageTypeWorkerTask,
+		Type:      protocol.MessageTypeWorkerTask,
 		CreatedAt: time.Now().UTC(),
-		Trace: events.TraceContext{
+		Trace: protocol.TraceContext{
 			TraceID:   session.PublicID,
 			RequestID: fmt.Sprintf("req_%d", message.ID),
 			TaskID:    fmt.Sprintf("task_%d", message.ID),
 		},
-		Route: events.RouteContext{
+		Route: protocol.RouteContext{
 			OrgID:     orgID,
 			SessionID: session.PublicID,
 			WorkerID:  session.AllocatedAssistantID,
 		},
-		Body: events.WorkerTaskBody{
-			TaskType: events.TaskTypeAgentRun,
-			Actor: events.ActorContext{
+		Body: protocol.WorkerTaskBody{
+			TaskType: protocol.TaskTypeAgentRun,
+			Actor: protocol.ActorContext{
 				UserID:      fmt.Sprintf("%d", session.Uin),
 				DisplayName: "",
 				Channel:     "session",
 			},
-			Input: events.TaskInput{
-				Type: events.InputTypeMessage,
+			Input: protocol.TaskInput{
+				Type: protocol.InputTypeMessage,
 			},
 		},
 		Metadata: map[string]any{
