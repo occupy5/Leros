@@ -3,8 +3,13 @@ package db
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 
 	"gorm.io/gorm"
+
+	"github.com/ygpkg/yg-go/apis/apiobj"
+	"github.com/ygpkg/yg-go/logs"
 
 	"github.com/insmtx/Leros/backend/types"
 )
@@ -37,30 +42,66 @@ func DeleteProject(ctx context.Context, db *gorm.DB, id uint) error {
 	return db.WithContext(ctx).Delete(&types.Project{}, id).Error
 }
 
-// ListProjects 分页查询项目列表
-func ListProjects(ctx context.Context, db *gorm.DB, orgID uint, keyword, status *string, offset, limit int) ([]*types.Project, int64, error) {
-	var entities []*types.Project
-	var total int64
+// ListProjectsResponse 项目列表查询结果
+type ListProjectsResponse struct {
+	Total  int64            `json:"total"`
+	Offset int              `json:"offset"`
+	Limit  int              `json:"limit"`
+	Items  []*types.Project `json:"items"`
+}
 
-	query := db.WithContext(ctx).Model(&types.Project{}).Where("org_id = ?", orgID)
+// ListProjects 使用 apiobj.PageQuery 风格的过滤器和排序分页查询项目列表
+func ListProjects(ctx context.Context, d *gorm.DB, orgID uint, opt *apiobj.PageQuery, ret *ListProjectsResponse) error {
+	query := d.WithContext(ctx).Table(types.TableNameProject).
+		Where("org_id = ? AND deleted_at IS NULL", orgID)
 
-	if keyword != nil && *keyword != "" {
-		query = query.Where("name LIKE ? OR description LIKE ?",
-			"%"+*keyword+"%", "%"+*keyword+"%")
+	for _, filter := range opt.Filters {
+		switch filter.Field {
+		case "name":
+			if filter.ExactMatch {
+				query = query.Where("name IN (?)", filter.Value)
+			} else {
+				conds := make([]string, len(filter.Value))
+				vals := make([]interface{}, len(filter.Value))
+				for i, v := range filter.Value {
+					conds[i] = "name LIKE ?"
+					vals[i] = "%" + v + "%"
+				}
+				query = query.Where(strings.Join(conds, " OR "), vals...)
+			}
+		case "status":
+			query = query.Where("status IN (?)", filter.Value)
+		case "public_id":
+			query = query.Where("public_id IN (?)", filter.Value)
+		default:
+			logs.WarnContextf(ctx, "[project][ListProjects] invalid filter field: %s", filter.Field)
+			return fmt.Errorf("invalid filter field: %s", filter.Field)
+		}
 	}
-	if status != nil && *status != "" {
-		query = query.Where("status = ?", *status)
+
+	if err := query.Count(&ret.Total).Error; err != nil {
+		return err
+	}
+	if ret.Total == 0 {
+		return nil
 	}
 
-	err := query.Count(&total).Error
+	if len(opt.OrderBy) > 0 {
+		query = query.Order(strings.Join(opt.OrderBy, ","))
+	} else {
+		query = query.Order("created_at DESC")
+	}
+
+	query = query.Offset(opt.Offset)
+	if !opt.ListAll && opt.Limit > 0 {
+		query = query.Limit(opt.Limit)
+	} else {
+		query = query.Limit(apiobj.PageMaxCount)
+	}
+
+	err := query.Find(&ret.Items).Error
 	if err != nil {
-		return nil, 0, err
+		return err
 	}
-
-	err = query.Offset(offset).Limit(limit).Order("created_at DESC").Find(&entities).Error
-	if err != nil {
-		return nil, 0, err
-	}
-
-	return entities, total, nil
+	return nil
 }

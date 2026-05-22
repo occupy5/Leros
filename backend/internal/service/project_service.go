@@ -168,25 +168,28 @@ func (s *projectService) DeleteProject(ctx context.Context, publicID string) err
 	})
 }
 
-func (s *projectService) ListProjects(ctx context.Context, req *contract.ListProjectsRequest) (*contract.ProjectList, error) {
+func (s *projectService) ListProjects(ctx context.Context, opt *contract.ListProjectQuery) (*contract.ProjectList, error) {
 	caller, err := requireCallerOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
-
-	projects, total, err := db.ListProjects(ctx, s.db, caller.OrgID, req.Keyword, req.Status, req.Offset, req.Limit)
-	if err != nil {
+	if err := opt.Validate(); err != nil {
 		return nil, err
 	}
 
-	items := make([]contract.Project, 0, len(projects))
-	for _, project := range projects {
+	var ret db.ListProjectsResponse
+	if err := db.ListProjects(ctx, s.db, caller.OrgID, &opt.PageQuery, &ret); err != nil {
+		return nil, err
+	}
+
+	items := make([]contract.Project, 0, len(ret.Items))
+	for _, project := range ret.Items {
 		items = append(items, *convertToContractProject(project))
 	}
 	return &contract.ProjectList{
-		Total:  total,
-		Offset: req.Offset,
-		Limit:  req.Limit,
+		Total:  ret.Total,
+		Offset: opt.Offset,
+		Limit:  opt.Limit,
 		Items:  items,
 	}, nil
 }
