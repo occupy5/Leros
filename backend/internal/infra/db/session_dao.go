@@ -3,9 +3,12 @@ package db
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
+
+	"github.com/ygpkg/yg-go/logs"
 
 	"github.com/insmtx/Leros/backend/types"
 )
@@ -80,42 +83,66 @@ func ExpireSessions(ctx context.Context, db *gorm.DB) error {
 		Update("status", string(types.SessionStatusExpired)).Error
 }
 
-// ListSessions 分页查询会话列表
-func ListSessions(ctx context.Context, db *gorm.DB, sessionType *types.SessionType, status *string, userID *uint, orgID *uint, assistantID *uint, assistantCode *string, keyword *string, offset, limit int) ([]*types.Session, int64, error) {
+// ListSessions 查询会话列表
+func ListSessions(ctx context.Context, db *gorm.DB, opt *PageQuery) ([]*types.Session, int64, error) {
 	var entities []*types.Session
 	var total int64
 
 	query := db.WithContext(ctx).Model(&types.Session{})
 
-	if sessionType != nil && *sessionType != "" {
-		query = query.Where("type = ?", *sessionType)
+	if opt.OrgID > 0 {
+		query = query.Where("org_id = ?", opt.OrgID)
 	}
-	if status != nil && *status != "" {
-		query = query.Where("status = ?", *status)
-	}
-	if userID != nil && *userID > 0 {
-		query = query.Where("uin = ?", *userID)
-	}
-	if orgID != nil && *orgID > 0 {
-		query = query.Where("org_id = ?", *orgID)
-	}
-	if assistantID != nil && *assistantID > 0 {
-		query = query.Where("assistant_id = ?", *assistantID)
-	}
-	if assistantCode != nil && *assistantCode != "" {
-		query = query.Where("assistant_code = ?", *assistantCode)
-	}
-	if keyword != nil && *keyword != "" {
-		query = query.Where("title LIKE ? OR public_id LIKE ?", "%"+*keyword+"%", "%"+*keyword+"%")
+	if opt.Uin > 0 {
+		query = query.Where("uin = ?", opt.Uin)
 	}
 
-	err := query.Count(&total).Error
-	if err != nil {
+	for _, filter := range opt.Filters {
+		switch filter.Field {
+		case "type":
+			if len(filter.Value) > 0 {
+				query = query.Where("type = ?", filter.Value[0])
+			}
+		case "status":
+			if len(filter.Value) > 0 {
+				query = query.Where("status = ?", filter.Value[0])
+			}
+		case "assistant_id":
+			if len(filter.Value) > 0 {
+				query = query.Where("assistant_id = ?", filter.Value[0])
+			}
+		case "assistant_code":
+			if len(filter.Value) > 0 {
+				query = query.Where("assistant_code = ?", filter.Value[0])
+			}
+		case "keyword":
+			if len(filter.Value) > 0 {
+				kw := filter.Value[0]
+				query = query.Where("title LIKE ? OR public_id LIKE ?", "%"+kw+"%", "%"+kw+"%")
+			}
+		default:
+			logs.WarnContextf(ctx, "[session][ListSessions] invalid filter field: %s", filter.Field)
+		}
+	}
+
+	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 
-	err = query.Offset(offset).Limit(limit).Order("created_at DESC").Find(&entities).Error
-	if err != nil {
+	if len(opt.OrderBy) > 0 {
+		query = query.Order(strings.Join(opt.OrderBy, ","))
+	} else {
+		query = query.Order("created_at DESC")
+	}
+
+	if !opt.ListAll && opt.Limit > 0 {
+		query = query.Limit(opt.Limit)
+	} else {
+		query = query.Limit(150)
+	}
+	query = query.Offset(opt.Offset)
+
+	if err := query.Find(&entities).Error; err != nil {
 		return nil, 0, err
 	}
 
