@@ -157,7 +157,7 @@ git push origin feat/your-feature-name
 
 ## 🌟 许可协议
 
-通过提交贡献，你同意你的代码将按 GNU General Public License v3.0 进行许可。
+通过提交贡献，你同意你的代码将按 Apache License 2.0 进行许可。
 
 ## 📬 联系方式
 
