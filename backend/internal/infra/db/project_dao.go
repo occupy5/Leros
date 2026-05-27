@@ -58,6 +58,19 @@ func CreateProjectMember(ctx context.Context, db *gorm.DB, member *types.Project
 	return db.WithContext(ctx).Create(member).Error
 }
 
+// ListProjectMembers 查询项目成员列表
+func ListProjectMembers(ctx context.Context, db *gorm.DB, projectID uint) ([]*types.ProjectMember, error) {
+	var entities []*types.ProjectMember
+	err := db.WithContext(ctx).
+		Where("project_id = ? AND deleted_at IS NULL", projectID).
+		Order("joined_at ASC").
+		Find(&entities).Error
+	if err != nil {
+		return nil, err
+	}
+	return entities, nil
+}
+
 // GetProjectSession 根据项目ID获取scope=project的会话
 func GetProjectSession(ctx context.Context, db *gorm.DB, projectID uint) (*types.Session, error) {
 	var entity types.Session

@@ -213,3 +213,16 @@ func UpdateLastMessageAt(ctx context.Context, db *gorm.DB, id uint, lastMessageA
 func UpdateAllocatedAssistantID(ctx context.Context, db *gorm.DB, id uint, allocatedAssistantID uint) error {
 	return db.WithContext(ctx).Model(&types.Session{}).Where("id = ?", id).Update("allocated_assistant_id", allocatedAssistantID).Error
 }
+
+// GetSessionsByIDs 批量根据ID查询会话
+func GetSessionsByIDs(ctx context.Context, db *gorm.DB, ids []uint) ([]*types.Session, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var entities []*types.Session
+	err := db.WithContext(ctx).Where("id IN (?)", ids).Find(&entities).Error
+	if err != nil {
+		return nil, err
+	}
+	return entities, nil
+}

@@ -24,6 +24,7 @@ func NewProjectHandler(service contract.ProjectService) *ProjectHandler {
 func (h *ProjectHandler) RegisterRoutes(r gin.IRouter) {
 	r.POST("/CreateProject", h.CreateProject)
 	r.POST("/GetProject", h.GetProject)
+	r.POST("/DetailProject", h.DetailProject)
 	r.POST("/UpdateProject", h.UpdateProject)
 	r.POST("/DeleteProject", h.DeleteProject)
 	r.POST("/ListProjects", h.ListProjects)
@@ -92,6 +93,37 @@ func (h *ProjectHandler) GetProject(ctx *gin.Context) {
 	}
 
 	result, err := h.service.GetProject(ctx, *req.PublicID)
+	if err != nil {
+		handleProjectServiceError(ctx, err)
+		return
+	}
+	ctx.JSON(http.StatusOK, dto.Success(result))
+}
+
+// @Summary 获取项目详情（含任务、会话、产物、成员）
+// @Description 根据PublicId获取项目完整详情
+// @Tags Project
+// @Accept json
+// @Produce json
+// @Param body body GetProjectRequest true "获取项目详情请求"
+// @Success 200 {object} dto.Response "成功响应"
+// @Failure 400 {object} dto.ErrorResponse "请求参数错误"
+// @Failure 401 {object} dto.ErrorResponse "未认证"
+// @Failure 404 {object} dto.ErrorResponse "资源不存在"
+// @Failure 500 {object} dto.ErrorResponse "内部服务器错误"
+// @Router /DetailProject [post]
+func (h *ProjectHandler) DetailProject(ctx *gin.Context) {
+	var req GetProjectRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, dto.Error(dto.CodeInvalidParams, err.Error()))
+		return
+	}
+	if req.PublicID == nil || *req.PublicID == "" {
+		ctx.JSON(http.StatusBadRequest, dto.Error(dto.CodeInvalidParams, "public_id is required"))
+		return
+	}
+
+	result, err := h.service.DetailProject(ctx, *req.PublicID)
 	if err != nil {
 		handleProjectServiceError(ctx, err)
 		return

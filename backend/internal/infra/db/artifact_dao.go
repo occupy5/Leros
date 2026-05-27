@@ -62,3 +62,13 @@ func ListTaskArtifacts(ctx context.Context, db *gorm.DB, orgID uint, taskID uint
 		Find(&entities).Error
 	return entities, err
 }
+
+// ListArtifactsByProjectID returns completed artifacts for a project.
+func ListArtifactsByProjectID(ctx context.Context, db *gorm.DB, orgID, projectID uint) ([]*types.Artifact, error) {
+	var entities []*types.Artifact
+	err := db.WithContext(ctx).
+		Where("org_id = ? AND project_id = ? AND status = ?", orgID, projectID, string(types.ArtifactStatusCompleted)).
+		Order("created_at DESC").
+		Find(&entities).Error
+	return entities, err
+}

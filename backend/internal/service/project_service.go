@@ -42,6 +42,7 @@ func (s *projectService) CreateProject(ctx context.Context, req *contract.Create
 		OwnerID:     caller.Uin,
 		Name:        strings.TrimSpace(req.Name),
 		Description: strings.TrimSpace(req.Description),
+		Objective:   strings.TrimSpace(req.Objective),
 		Status:      "active",
 	}
 	if req.Metadata != nil {
@@ -113,6 +114,9 @@ func (s *projectService) UpdateProject(ctx context.Context, publicID string, req
 		}
 		if req.Description != nil {
 			project.Description = strings.TrimSpace(*req.Description)
+		}
+		if req.Objective != nil {
+			project.Objective = strings.TrimSpace(*req.Objective)
 		}
 		if req.OwnerID != nil {
 			project.OwnerID = *req.OwnerID
@@ -225,12 +229,141 @@ func convertToContractProject(project *types.Project) *contract.Project {
 		PublicID:    project.PublicID,
 		Name:        project.Name,
 		Description: project.Description,
+		Objective:   project.Objective,
 		OwnerID:     project.OwnerID,
 		Status:      project.Status,
 		Metadata:    metadata,
 		CreatedAt:   project.CreatedAt,
 		UpdatedAt:   project.UpdatedAt,
 	}
+}
+
+func (s *projectService) DetailProject(ctx context.Context, publicID string) (*contract.ProjectDetail, error) {
+	caller, err := requireCallerOrg(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(publicID) == "" {
+		return nil, errors.New("public_id is required")
+	}
+
+	project, err := db.GetProjectByPublicID(ctx, s.db, caller.OrgID, publicID)
+	if err != nil {
+		return nil, err
+	}
+	if project == nil {
+		return nil, errors.New("project not found")
+	}
+
+	result := &contract.ProjectDetail{
+		Project:   *convertToContractProject(project),
+		Tasks:     make([]contract.ProjectTaskItem, 0),
+		Artifacts: make([]contract.Artifact, 0),
+		Members:   make([]contract.ProjectMemberItem, 0),
+	}
+
+	// 查询项目会话
+	prjSession, _ := db.GetProjectSession(ctx, s.db, project.ID)
+	if prjSession != nil {
+		result.Session = convertToContractSession(prjSession)
+	}
+
+	// 查询项目任务
+	tasks, err := db.ListTasksByProjectID(ctx, s.db, caller.OrgID, project.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 收集任务会话ID，批量查询会话
+	taskSessionIDs := make([]uint, 0)
+	taskIDs := make([]uint, 0, len(tasks))
+	for _, t := range tasks {
+		taskIDs = append(taskIDs, t.ID)
+		if t.SessionID != nil {
+			taskSessionIDs = append(taskSessionIDs, *t.SessionID)
+		}
+	}
+
+	taskSessions, err := db.GetSessionsByIDs(ctx, s.db, taskSessionIDs)
+	if err != nil {
+		return nil, err
+	}
+	sessionMap := make(map[uint]*types.Session, len(taskSessions))
+	for _, sess := range taskSessions {
+		sessionMap[sess.ID] = sess
+	}
+
+	for _, t := range tasks {
+		item := contract.ProjectTaskItem{
+			Task: *convertToContractTask(t, project.PublicID),
+		}
+		if t.SessionID != nil {
+			if sess, ok := sessionMap[*t.SessionID]; ok {
+				item.Session = convertToContractSession(sess)
+			}
+		}
+		result.Tasks = append(result.Tasks, item)
+	}
+
+	// 查询项目产物
+	artifacts, err := db.ListArtifactsByProjectID(ctx, s.db, caller.OrgID, project.ID)
+	if err != nil {
+		return nil, err
+	}
+	for _, a := range artifacts {
+		result.Artifacts = append(result.Artifacts, convertToContractArtifact(a))
+	}
+
+	// 查询项目成员
+	members, err := db.ListProjectMembers(ctx, s.db, project.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	userIDs := make([]uint, 0)
+	assistantIDs := make([]uint, 0)
+	for _, m := range members {
+		if m.MemberType == types.MemberTypeUser {
+			userIDs = append(userIDs, m.MemberID)
+		} else if m.MemberType == types.MemberTypeAssistant {
+			assistantIDs = append(assistantIDs, m.MemberID)
+		}
+	}
+
+	users, _ := db.GetUsersByIDs(ctx, s.db, userIDs)
+	userMap := make(map[uint]*types.User, len(users))
+	for _, u := range users {
+		userMap[u.ID] = u
+	}
+
+	assistants, _ := db.GetAssistantsByIDs(ctx, s.db, assistantIDs)
+	assistantMap := make(map[uint]*types.DigitalAssistant, len(assistants))
+	for _, a := range assistants {
+		assistantMap[a.ID] = a
+	}
+
+	for _, m := range members {
+		item := contract.ProjectMemberItem{
+			MemberID:   m.MemberID,
+			MemberType: string(m.MemberType),
+			MemberRole: string(m.MemberRole),
+			JoinedAt:   m.JoinedAt,
+		}
+		if m.MemberType == types.MemberTypeUser {
+			if u, ok := userMap[m.MemberID]; ok {
+				item.Name = u.Name
+				item.AvatarURL = u.AvatarURL
+			}
+		} else if m.MemberType == types.MemberTypeAssistant {
+			if a, ok := assistantMap[m.MemberID]; ok {
+				item.Name = a.Name
+				item.AvatarURL = a.Avatar
+			}
+		}
+		result.Members = append(result.Members, item)
+	}
+
+	return result, nil
 }
 
 func generateProjectPublicID() string {
