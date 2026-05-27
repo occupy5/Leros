@@ -85,14 +85,6 @@ export function TaskDetailPage() {
 		<div data-slot="task-detail-page" className="flex h-full flex-1 flex-col bg-[var(--leros-surface)]">
 			<header className="flex h-16 shrink-0 items-center justify-between border-b border-[var(--leros-control-border)] bg-[var(--leros-surface-soft)] px-10">
 				<div className="flex items-center gap-3 text-[var(--leros-text-muted)]">
-					<button
-						type="button"
-						onClick={() => switchView("workbench")}
-						className="text-xs font-semibold uppercase tracking-widest hover:text-[var(--leros-text-strong)]"
-					>
-						Projects
-					</button>
-					<span className="text-[var(--leros-text-subtle)]">/</span>
 					{project && (
 						<>
 						<button
