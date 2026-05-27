@@ -51,3 +51,28 @@ type ProjectList struct {
 	Limit  int       `json:"limit"`
 	Items  []Project `json:"items"`
 }
+
+// ProjectDetail 项目详情响应，包含关联的会话、任务、产物和成员
+type ProjectDetail struct {
+	Project
+	Session   *Session             `json:"session,omitempty"`
+	Tasks     []ProjectTaskItem    `json:"tasks"`
+	Artifacts []Artifact           `json:"artifacts,omitempty"`
+	Members   []ProjectMemberItem  `json:"members"`
+}
+
+// ProjectTaskItem 项目详情中的任务项，包含关联的会话信息
+type ProjectTaskItem struct {
+	Task
+	Session *Session `json:"session,omitempty"`
+}
+
+// ProjectMemberItem 项目详情中的成员项，包含用户基本信息
+type ProjectMemberItem struct {
+	MemberID   uint      `json:"member_id"`
+	MemberType string    `json:"member_type"`
+	MemberRole string    `json:"member_role"`
+	JoinedAt   time.Time `json:"joined_at"`
+	Name       string    `json:"name,omitempty"`
+	AvatarURL  string    `json:"avatar_url,omitempty"`
+}

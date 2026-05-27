@@ -18,4 +18,7 @@ type ProjectService interface {
 
 	// 查询项目列表
 	ListProjects(ctx context.Context, req *ListProjectsRequest) (*ProjectList, error)
+
+	// 获取项目详情（含任务、会话、产物、成员）
+	DetailProject(ctx context.Context, publicID string) (*ProjectDetail, error)
 }

@@ -101,3 +101,16 @@ func ListTasks(ctx context.Context, d *gorm.DB, opt *types.PageQuery) ([]*types.
 	}
 	return entities, total, nil
 }
+
+// ListTasksByProjectID 根据项目ID查询所有未删除的任务
+func ListTasksByProjectID(ctx context.Context, db *gorm.DB, orgID, projectID uint) ([]*types.Task, error) {
+	var entities []*types.Task
+	err := db.WithContext(ctx).
+		Where("org_id = ? AND project_id = ? AND deleted_at IS NULL", orgID, projectID).
+		Order("created_at DESC").
+		Find(&entities).Error
+	if err != nil {
+		return nil, err
+	}
+	return entities, nil
+}
