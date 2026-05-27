@@ -1,7 +1,3 @@
-ARG BUILDPLATFORM
-ARG TARGETOS
-ARG TARGETARCH
-
 FROM registry.yygu.cn/library/golang:1.24 AS builder
 
 WORKDIR /build
@@ -15,20 +11,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tzdata \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy go mod files first to leverage Docker layer caching with mount cache
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/ \
     go mod download
 
-# Copy source code
 COPY . .
 
-ARG TARGETOS
-ARG TARGETARCH
-
-# Build the application with module cache mounted
 RUN --mount=type=cache,target=/go/ \
-    CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    CGO_ENABLED=0 \
     go build -ldflags="-s -w" -v -o /build/leros ./backend/cmd/leros/
 
 FROM registry.yygu.cn/library/ubuntu:24.04
@@ -42,6 +32,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tzdata \
     curl \
     xz-utils \
+    git \
+    vim \
+    less \
+    htop \
+    strace \
+    netcat-openbsd \
     python3.12 \
     python3-pip \
     && rm -rf /var/lib/apt/lists/*
@@ -60,8 +56,6 @@ RUN npm config set registry https://registry.npmmirror.com \
     && npm install -g @anthropic-ai/claude-code \
     && npm cache clean --force
 
-RUN useradd -r -s /bin/false appuser
-
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
 COPY --from=builder /build/leros /leros
@@ -70,7 +64,5 @@ COPY --from=builder /build/backend/skills /app/backend/skills
 WORKDIR /app
 
 EXPOSE 8080
-
-USER appuser
 
 ENTRYPOINT ["/leros"]
