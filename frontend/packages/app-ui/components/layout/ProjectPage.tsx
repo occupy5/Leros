@@ -30,10 +30,10 @@ const projectTabs = [
 ];
 
 export function ProjectPage() {
-	const { projects, activeProjectId, activeProjectTab, projectDetailLoading, projectDetailError, activeProjectSessionId, switchView, setActiveProjectTab, fetchProjectDetail } =
+	const { projects, activeProjectId, activeProjectTab, projectDetailLoading, projectDetailError, activeProjectSessionId, projectSessionId, switchView, setActiveProjectTab, fetchProjectDetail } =
 		useLayoutStore((s) => s);
 
-	const { setActiveSession, loadConversationMessages } = useChatStore((s) => s);
+	const { setActiveSession, loadConversationMessages, clearMessages } = useChatStore((s) => s);
 
 	const project = projects.find((item) => item.id === activeProjectId) ?? projects[0];
 
@@ -48,6 +48,18 @@ export function ProjectPage() {
 		setActiveSession(activeProjectSessionId);
 		loadConversationMessages(activeProjectSessionId);
 	}, [activeProjectSessionId, setActiveSession, loadConversationMessages]);
+
+	useEffect(() => {
+		if (!projectSessionId || activeProjectSessionId) return;
+		setActiveSession(projectSessionId);
+		loadConversationMessages(projectSessionId);
+	}, [projectSessionId, activeProjectSessionId, setActiveSession, loadConversationMessages]);
+
+	useEffect(() => {
+		return () => {
+			clearMessages();
+		};
+	}, [clearMessages]);
 
 	if (!project) {
 		return (

@@ -113,6 +113,7 @@ export type LayoutState = {
 	projectDetailLoading: boolean;
 	projectDetailError: string | null;
 	activeProjectSessionId: string | null;
+	projectSessionId: string | null;
 };
 
 export type LayoutAction = Pick<LayoutActionImpl, keyof LayoutActionImpl>;
@@ -221,6 +222,7 @@ const _initialState: LayoutState = {
 	projectDetailLoading: false,
 	projectDetailError: null,
 	activeProjectSessionId: null,
+	projectSessionId: null,
 };
 
 type SetState = (
@@ -515,6 +517,7 @@ export class LayoutActionImpl {
 						: p,
 				),
 				projectDetailLoading: false,
+				projectSessionId: detail.session?.session_id ?? null,
 			}));
 		} catch (err) {
 			console.error("fetchProjectDetail error:", err);
