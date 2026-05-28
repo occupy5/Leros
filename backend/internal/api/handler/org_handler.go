@@ -63,12 +63,12 @@ func (h *OrgHandler) CreateOrg(ctx *gin.Context) {
 }
 
 type GetOrgRequest struct {
-	ID   *uint  `json:"id,omitempty"`
-	Code string `json:"code,omitempty"`
+	PublicID string `json:"public_id,omitempty"`
+	Code     string `json:"code,omitempty"`
 }
 
 // @Summary 获取组织详情
-// @Description 根据ID或Code获取组织详情
+// @Description 根据PublicID或Code获取组织详情
 // @Tags Organization
 // @Accept json
 // @Produce json
@@ -86,12 +86,7 @@ func (h *OrgHandler) GetOrg(ctx *gin.Context) {
 		return
 	}
 
-	var id uint
-	if req.ID != nil {
-		id = *req.ID
-	}
-
-	result, err := h.service.GetOrg(ctx, id, req.Code)
+	result, err := h.service.GetOrg(ctx, req.PublicID, req.Code)
 	if err != nil {
 		handleOrgServiceError(ctx, err)
 		return
@@ -100,7 +95,7 @@ func (h *OrgHandler) GetOrg(ctx *gin.Context) {
 }
 
 type UpdateOrgRequest struct {
-	ID uint `json:"id" binding:"required"`
+	PublicID string `json:"public_id" binding:"required"`
 	contract.UpdateOrgRequest
 }
 
@@ -123,7 +118,7 @@ func (h *OrgHandler) UpdateOrg(ctx *gin.Context) {
 		return
 	}
 
-	result, err := h.service.UpdateOrg(ctx, req.ID, &req.UpdateOrgRequest)
+	result, err := h.service.UpdateOrg(ctx, req.PublicID, &req.UpdateOrgRequest)
 	if err != nil {
 		handleOrgServiceError(ctx, err)
 		return
@@ -132,11 +127,11 @@ func (h *OrgHandler) UpdateOrg(ctx *gin.Context) {
 }
 
 type DeleteOrgRequest struct {
-	ID uint `json:"id" binding:"required"`
+	PublicID string `json:"public_id" binding:"required"`
 }
 
 // @Summary 删除组织
-// @Description 根据ID删除组织（软删除）
+// @Description 根据PublicID删除组织（软删除）
 // @Tags Organization
 // @Accept json
 // @Produce json
@@ -154,7 +149,7 @@ func (h *OrgHandler) DeleteOrg(ctx *gin.Context) {
 		return
 	}
 
-	if err := h.service.DeleteOrg(ctx, req.ID); err != nil {
+	if err := h.service.DeleteOrg(ctx, req.PublicID); err != nil {
 		handleOrgServiceError(ctx, err)
 		return
 	}
@@ -360,8 +355,9 @@ func handleOrgServiceError(ctx *gin.Context, err error) {
 	case "name is required",
 		"code is required",
 		"name cannot be empty",
+		"public_id is required",
+		"public_id or code is required",
 		"id is required",
-		"id or code is required",
 		"id or uin is required",
 		"user_id is required",
 		"org_id is required",

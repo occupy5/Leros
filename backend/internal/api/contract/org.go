@@ -4,9 +4,9 @@ import "context"
 
 type OrgService interface {
 	CreateOrg(ctx context.Context, req *CreateOrgRequest) (*Org, error)
-	GetOrg(ctx context.Context, id uint, code string) (*Org, error)
-	UpdateOrg(ctx context.Context, id uint, req *UpdateOrgRequest) (*Org, error)
-	DeleteOrg(ctx context.Context, id uint) error
+	GetOrg(ctx context.Context, publicID string, code string) (*Org, error)
+	UpdateOrg(ctx context.Context, publicID string, req *UpdateOrgRequest) (*Org, error)
+	DeleteOrg(ctx context.Context, publicID string) error
 	ListOrgs(ctx context.Context, req *ListOrgsRequest) (*OrgList, error)
 
 	CreateOrgMember(ctx context.Context, req *CreateOrgMemberRequest) (*OrgMember, error)

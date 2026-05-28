@@ -27,6 +27,18 @@ func GetUserByID(ctx context.Context, d *gorm.DB, id uint) (*types.User, error) 
 	return &entity, nil
 }
 
+func GetUserByPublicID(ctx context.Context, d *gorm.DB, publicID string) (*types.User, error) {
+	var entity types.User
+	err := d.WithContext(ctx).Where("public_id = ?", publicID).First(&entity).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &entity, nil
+}
+
 func GetUserByGithubLogin(ctx context.Context, d *gorm.DB, githubLogin string) (*types.User, error) {
 	var entity types.User
 	err := d.WithContext(ctx).Where("github_login = ?", githubLogin).First(&entity).Error

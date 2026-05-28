@@ -7,7 +7,7 @@ import (
 )
 
 type UserInfo struct {
-	ID           uint      `json:"id"`
+	PublicID     string    `json:"public_id"`
 	GithubID     int64     `json:"github_id,omitempty"`
 	GithubLogin  string    `json:"github_login"`
 	Name         string    `json:"name"`

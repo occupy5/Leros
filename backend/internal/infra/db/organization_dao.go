@@ -27,6 +27,18 @@ func GetOrgByID(ctx context.Context, d *gorm.DB, id uint) (*types.Organization, 
 	return &entity, nil
 }
 
+func GetOrgByPublicID(ctx context.Context, d *gorm.DB, publicID string) (*types.Organization, error) {
+	var entity types.Organization
+	err := d.WithContext(ctx).Where("public_id = ?", publicID).First(&entity).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &entity, nil
+}
+
 func GetOrgByCode(ctx context.Context, d *gorm.DB, code string) (*types.Organization, error) {
 	var entity types.Organization
 	err := d.WithContext(ctx).Where("code = ?", code).First(&entity).Error

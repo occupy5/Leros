@@ -57,12 +57,12 @@ func (h *UserHandler) CreateUser(ctx *gin.Context) {
 }
 
 type GetUserRequest struct {
-	ID          *uint  `json:"id,omitempty"`
+	PublicID    string `json:"public_id,omitempty"`
 	GithubLogin string `json:"github_login,omitempty"`
 }
 
 // @Summary 获取用户详情
-// @Description 根据ID或GithubLogin获取用户详情
+// @Description 根据PublicID或GithubLogin获取用户详情
 // @Tags User
 // @Accept json
 // @Produce json
@@ -80,12 +80,7 @@ func (h *UserHandler) GetUser(ctx *gin.Context) {
 		return
 	}
 
-	var id uint
-	if req.ID != nil {
-		id = *req.ID
-	}
-
-	result, err := h.service.GetUser(ctx, id, req.GithubLogin)
+	result, err := h.service.GetUser(ctx, req.PublicID, req.GithubLogin)
 	if err != nil {
 		handleUserServiceError(ctx, err)
 		return
@@ -94,7 +89,7 @@ func (h *UserHandler) GetUser(ctx *gin.Context) {
 }
 
 type UpdateUserRequest struct {
-	ID uint `json:"id" binding:"required"`
+	PublicID string `json:"public_id" binding:"required"`
 	contract.UpdateUserRequest
 }
 
@@ -117,7 +112,7 @@ func (h *UserHandler) UpdateUser(ctx *gin.Context) {
 		return
 	}
 
-	result, err := h.service.UpdateUser(ctx, req.ID, &req.UpdateUserRequest)
+	result, err := h.service.UpdateUser(ctx, req.PublicID, &req.UpdateUserRequest)
 	if err != nil {
 		handleUserServiceError(ctx, err)
 		return
@@ -126,11 +121,11 @@ func (h *UserHandler) UpdateUser(ctx *gin.Context) {
 }
 
 type DeleteUserRequest struct {
-	ID uint `json:"id" binding:"required"`
+	PublicID string `json:"public_id" binding:"required"`
 }
 
 // @Summary 删除用户
-// @Description 根据ID删除用户（软删除）
+// @Description 根据PublicID删除用户（软删除）
 // @Tags User
 // @Accept json
 // @Produce json
@@ -148,7 +143,7 @@ func (h *UserHandler) DeleteUser(ctx *gin.Context) {
 		return
 	}
 
-	if err := h.service.DeleteUser(ctx, req.ID); err != nil {
+	if err := h.service.DeleteUser(ctx, req.PublicID); err != nil {
 		handleUserServiceError(ctx, err)
 		return
 	}
@@ -197,8 +192,8 @@ func handleUserServiceError(ctx *gin.Context, err error) {
 	case "name is required",
 		"github_login is required",
 		"github_login already exists",
-		"id is required",
-		"id or github_login is required":
+		"public_id is required",
+		"public_id or github_login is required":
 		ctx.JSON(http.StatusBadRequest, dto.Error(dto.CodeInvalidParams, errMsg))
 	default:
 		ctx.JSON(http.StatusInternalServerError, dto.Error(dto.CodeInternalError, errMsg))

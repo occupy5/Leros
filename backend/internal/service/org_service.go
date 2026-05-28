@@ -12,6 +12,7 @@ import (
 	"github.com/insmtx/Leros/backend/internal/api/contract"
 	"github.com/insmtx/Leros/backend/internal/infra/db"
 	"github.com/insmtx/Leros/backend/types"
+	"github.com/ygpkg/yg-go/encryptor/snowflake"
 )
 
 var _ contract.OrgService = (*orgService)(nil)
@@ -55,10 +56,11 @@ func (s *orgService) CreateOrg(ctx context.Context, req *contract.CreateOrgReque
 	}
 
 	org := &types.Organization{
-		Type:   orgType,
-		Code:   strings.TrimSpace(req.Code),
-		Name:   strings.TrimSpace(req.Name),
-		Status: status,
+		PublicID: fmt.Sprintf("org_%s", snowflake.GenerateIDBase58()),
+		Type:     orgType,
+		Code:     strings.TrimSpace(req.Code),
+		Name:     strings.TrimSpace(req.Name),
+		Status:   status,
 	}
 
 	if err := db.CreateOrg(ctx, s.db, org); err != nil {
@@ -68,7 +70,7 @@ func (s *orgService) CreateOrg(ctx context.Context, req *contract.CreateOrgReque
 	return convertToContractOrg(org), nil
 }
 
-func (s *orgService) GetOrg(ctx context.Context, id uint, code string) (*contract.Org, error) {
+func (s *orgService) GetOrg(ctx context.Context, publicID string, code string) (*contract.Org, error) {
 	caller, _ := auth.FromContext(ctx)
 	if caller == nil || caller.Uin == 0 {
 		return nil, errors.New("user not authenticated")
@@ -77,12 +79,12 @@ func (s *orgService) GetOrg(ctx context.Context, id uint, code string) (*contrac
 	var org *types.Organization
 	var err error
 
-	if id > 0 {
-		org, err = db.GetOrgByID(ctx, s.db, id)
+	if publicID != "" {
+		org, err = db.GetOrgByPublicID(ctx, s.db, publicID)
 	} else if code != "" {
 		org, err = db.GetOrgByCode(ctx, s.db, code)
 	} else {
-		return nil, errors.New("id or code is required")
+		return nil, errors.New("public_id or code is required")
 	}
 
 	if err != nil {
@@ -95,19 +97,19 @@ func (s *orgService) GetOrg(ctx context.Context, id uint, code string) (*contrac
 	return convertToContractOrg(org), nil
 }
 
-func (s *orgService) UpdateOrg(ctx context.Context, id uint, req *contract.UpdateOrgRequest) (*contract.Org, error) {
+func (s *orgService) UpdateOrg(ctx context.Context, publicID string, req *contract.UpdateOrgRequest) (*contract.Org, error) {
 	caller, _ := auth.FromContext(ctx)
 	if caller == nil || caller.Uin == 0 {
 		return nil, errors.New("user not authenticated")
 	}
-	if id == 0 {
-		return nil, errors.New("id is required")
+	if strings.TrimSpace(publicID) == "" {
+		return nil, errors.New("public_id is required")
 	}
 
 	var org *types.Organization
 	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var err error
-		org, err = db.GetOrgByID(ctx, tx, id)
+		org, err = db.GetOrgByPublicID(ctx, tx, publicID)
 		if err != nil {
 			return err
 		}
@@ -136,24 +138,24 @@ func (s *orgService) UpdateOrg(ctx context.Context, id uint, req *contract.Updat
 	return convertToContractOrg(org), nil
 }
 
-func (s *orgService) DeleteOrg(ctx context.Context, id uint) error {
+func (s *orgService) DeleteOrg(ctx context.Context, publicID string) error {
 	caller, _ := auth.FromContext(ctx)
 	if caller == nil || caller.Uin == 0 {
 		return errors.New("user not authenticated")
 	}
-	if id == 0 {
-		return errors.New("id is required")
+	if strings.TrimSpace(publicID) == "" {
+		return errors.New("public_id is required")
 	}
 
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		org, err := db.GetOrgByID(ctx, tx, id)
+		org, err := db.GetOrgByPublicID(ctx, tx, publicID)
 		if err != nil {
 			return err
 		}
 		if org == nil {
 			return errors.New("org not found")
 		}
-		return db.DeleteOrg(ctx, tx, id)
+		return db.DeleteOrg(ctx, tx, org.ID)
 	})
 }
 
@@ -195,14 +197,14 @@ func (s *orgService) CreateOrgMember(ctx context.Context, req *contract.CreateOr
 	if caller == nil || caller.Uin == 0 {
 		return nil, errors.New("user not authenticated")
 	}
-	if req.UserID == 0 {
+	if strings.TrimSpace(req.UserID) == "" {
 		return nil, errors.New("user_id is required")
 	}
-	if req.OrgID == 0 {
+	if strings.TrimSpace(req.OrgID) == "" {
 		return nil, errors.New("org_id is required")
 	}
 
-	user, err := db.GetUserByID(ctx, s.db, req.UserID)
+	user, err := db.GetUserByPublicID(ctx, s.db, req.UserID)
 	if err != nil {
 		return nil, err
 	}
@@ -210,7 +212,7 @@ func (s *orgService) CreateOrgMember(ctx context.Context, req *contract.CreateOr
 		return nil, errors.New("user not found")
 	}
 
-	org, err := db.GetOrgByID(ctx, s.db, req.OrgID)
+	org, err := db.GetOrgByPublicID(ctx, s.db, req.OrgID)
 	if err != nil {
 		return nil, err
 	}
@@ -219,9 +221,9 @@ func (s *orgService) CreateOrgMember(ctx context.Context, req *contract.CreateOr
 	}
 
 	userOrg := &types.UserOrg{
-		Uin:       req.UserID,
-		UserID:    req.UserID,
-		OrgID:     req.OrgID,
+		Uin:       user.ID,
+		UserID:    user.ID,
+		OrgID:     org.ID,
 		IsDefault: req.IsDefault,
 	}
 
@@ -282,15 +284,15 @@ func (s *orgService) UpdateOrgMember(ctx context.Context, id uint, req *contract
 			return errors.New("org member not found")
 		}
 
-		if req.OrgID != nil {
-			org, err := db.GetOrgByID(ctx, tx, *req.OrgID)
+		if req.OrgID != nil && strings.TrimSpace(*req.OrgID) != "" {
+			org, err := db.GetOrgByPublicID(ctx, tx, *req.OrgID)
 			if err != nil {
 				return err
 			}
 			if org == nil {
 				return errors.New("org not found")
 			}
-			userOrg.OrgID = *req.OrgID
+			userOrg.OrgID = org.ID
 		}
 		if req.IsDefault != nil {
 			userOrg.IsDefault = *req.IsDefault
@@ -334,11 +336,23 @@ func (s *orgService) ListOrgMembers(ctx context.Context, req *contract.ListOrgMe
 
 	opt := types.NewPageQuery(*caller, req.Offset, req.Limit)
 	opt.ListAll = req.ListAll
-	if req.OrgID != nil && *req.OrgID > 0 {
-		opt.AddExactFilter("org_id", fmt.Sprintf("%d", *req.OrgID))
+	if req.OrgID != nil && strings.TrimSpace(*req.OrgID) != "" {
+		org, err := db.GetOrgByPublicID(ctx, s.db, *req.OrgID)
+		if err != nil {
+			return nil, err
+		}
+		if org != nil {
+			opt.AddExactFilter("org_id", fmt.Sprintf("%d", org.ID))
+		}
 	}
-	if req.UserID != nil && *req.UserID > 0 {
-		opt.AddExactFilter("user_id", fmt.Sprintf("%d", *req.UserID))
+	if req.UserID != nil && strings.TrimSpace(*req.UserID) != "" {
+		user, err := db.GetUserByPublicID(ctx, s.db, *req.UserID)
+		if err != nil {
+			return nil, err
+		}
+		if user != nil {
+			opt.AddExactFilter("user_id", fmt.Sprintf("%d", user.ID))
+		}
 	}
 
 	userOrgs, total, err := db.ListUserOrgs(ctx, s.db, opt)
@@ -362,8 +376,6 @@ func (s *orgService) enrichOrgMember(ctx context.Context, uo *types.UserOrg) *co
 	result := &contract.OrgMember{
 		ID:        uo.ID,
 		Uin:       uo.Uin,
-		UserID:    uo.UserID,
-		OrgID:     uo.OrgID,
 		IsDefault: uo.IsDefault,
 		CreatedAt: uo.CreatedAt,
 		UpdatedAt: uo.UpdatedAt,
@@ -371,6 +383,7 @@ func (s *orgService) enrichOrgMember(ctx context.Context, uo *types.UserOrg) *co
 
 	user, _ := db.GetUserByID(ctx, s.db, uo.UserID)
 	if user != nil {
+		result.UserID = user.PublicID
 		result.UserName = user.Name
 		result.UserLogin = user.GithubLogin
 		result.AvatarURL = user.AvatarURL
@@ -378,6 +391,7 @@ func (s *orgService) enrichOrgMember(ctx context.Context, uo *types.UserOrg) *co
 
 	org, _ := db.GetOrgByID(ctx, s.db, uo.OrgID)
 	if org != nil {
+		result.OrgID = org.PublicID
 		result.OrgName = org.Name
 	}
 
@@ -389,7 +403,7 @@ func convertToContractOrg(org *types.Organization) *contract.Org {
 		return nil
 	}
 	return &contract.Org{
-		ID:        org.ID,
+		PublicID:  org.PublicID,
 		Type:      org.Type,
 		Code:      org.Code,
 		Name:      org.Name,
