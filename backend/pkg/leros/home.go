@@ -13,6 +13,9 @@ const (
 	// EnvWorkspaceRoot is the worker-local root used for Leros state.
 	EnvWorkspaceRoot = "LEROS_WORKSPACE_ROOT"
 
+	stateDirName = ".leros"
+	stateDBName  = "leros.db"
+
 	defaultWorkspaceRootUnix = "/workspace"
 	defaultWindowsAppName    = "Leros"
 	defaultWorkspaceDirName  = "workspace"
@@ -54,6 +57,23 @@ func SkillsDir() (string, error) {
 // MemoryDir returns the default Leros memory directory.
 func MemoryDir() (string, error) {
 	return JoinWorkspace("memory")
+}
+
+// EnsureStateDir 确保 workspace_root/.leros 目录存在并返回其路径。
+func EnsureStateDir() (string, error) {
+	dir, err := JoinWorkspace(stateDirName)
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", fmt.Errorf("create state dir %s: %w", dir, err)
+	}
+	return dir, nil
+}
+
+// StateDBPath 返回状态数据库文件的完整路径（workspace_root/.leros/leros.db），不保证文件存在。
+func StateDBPath() (string, error) {
+	return JoinWorkspace(stateDirName, stateDBName)
 }
 
 // TempDir returns the fallback workspace directory used when a run has no project workspace.
