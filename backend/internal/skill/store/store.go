@@ -24,6 +24,8 @@ const (
 
 	ActionCreate     = "create"
 	ActionPatch      = "patch"
+	ActionEdit       = "edit"
+	ActionDelete     = "delete"
 	ActionWriteFile  = "write_file"
 	ActionRemoveFile = "remove_file"
 )
@@ -80,6 +82,17 @@ type WriteFileRequest struct {
 type RemoveFileRequest struct {
 	Name     string
 	FilePath string
+}
+
+// EditRequest 表示完整替换已有 Skill 的 SKILL.md 内容的请求。
+type EditRequest struct {
+	Name    string
+	Content string
+}
+
+// DeleteRequest 表示删除整个 Skill 目录的请求。
+type DeleteRequest struct {
+	Name string
 }
 
 // DefaultSkillRoot 返回默认 workspace skills 目录。
@@ -309,6 +322,77 @@ func (s *SkillStore) RemoveFile(ctx context.Context, req RemoveFileRequest) (*Re
 		Name:    name,
 		Message: fmt.Sprintf("File %q removed from skill %q.", req.FilePath, name),
 		Path:    targetPath,
+	}
+	return result, nil
+}
+
+// Edit 完全替换已有 Skill 的 SKILL.md 内容。
+func (s *SkillStore) Edit(ctx context.Context, req EditRequest) (*Result, error) {
+	if err := ctxErr(ctx); err != nil {
+		return nil, err
+	}
+	if err := s.validate(); err != nil {
+		return nil, err
+	}
+
+	name := strings.TrimSpace(req.Name)
+	content := strings.TrimSpace(req.Content)
+	if err := validateName(name, "skill name"); err != nil {
+		return nil, err
+	}
+	if err := validateSkillDocument(content); err != nil {
+		return nil, err
+	}
+
+	skill, err := s.Find(ctx, name)
+	if err != nil {
+		return failure(ActionEdit, name, err.Error()), nil
+	}
+
+	skillPath := filepath.Join(skill.Path, skillFileName)
+	if err := atomicWrite(skillPath, content); err != nil {
+		return nil, err
+	}
+
+	result := &Result{
+		Success: true,
+		Action:  ActionEdit,
+		Name:    name,
+		Message: fmt.Sprintf("Skill %q updated.", name),
+		Path:    skill.Path,
+	}
+	return result, nil
+}
+
+// Delete 删除整个 Skill 目录。
+func (s *SkillStore) Delete(ctx context.Context, req DeleteRequest) (*Result, error) {
+	if err := ctxErr(ctx); err != nil {
+		return nil, err
+	}
+	if err := s.validate(); err != nil {
+		return nil, err
+	}
+
+	name := strings.TrimSpace(req.Name)
+	if err := validateName(name, "skill name"); err != nil {
+		return nil, err
+	}
+
+	skill, err := s.Find(ctx, name)
+	if err != nil {
+		return failure(ActionDelete, name, err.Error()), nil
+	}
+
+	if err := os.RemoveAll(skill.Path); err != nil {
+		return nil, fmt.Errorf("delete skill dir: %w", err)
+	}
+
+	result := &Result{
+		Success: true,
+		Action:  ActionDelete,
+		Name:    name,
+		Message: fmt.Sprintf("Skill %q deleted.", name),
+		Path:    skill.Path,
 	}
 	return result, nil
 }
