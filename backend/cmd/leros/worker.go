@@ -19,6 +19,7 @@ import (
 	"github.com/insmtx/Leros/backend/internal/worker/approval"
 	"github.com/insmtx/Leros/backend/internal/worker/identity"
 	"github.com/insmtx/Leros/backend/internal/worker/router"
+	"github.com/insmtx/Leros/backend/internal/worker/skillinstall"
 	"github.com/insmtx/Leros/backend/internal/worker/taskconsumer"
 	"github.com/insmtx/Leros/backend/pkg/leros"
 	"github.com/spf13/cobra"
@@ -242,9 +243,21 @@ func runTaskWorker(defaultRuntime string) {
 		return
 	}
 
+	skillInstallConsumer, err := skillinstall.New(skillinstall.Config{
+		OrgID:    cfg.OrgID,
+		WorkerID: cfg.WorkerID,
+	}, bus)
+	if err != nil {
+		cancel()
+		_ = bus.Close()
+		logs.Fatalf("Failed to create skill install consumer: %v", err)
+		return
+	}
+
 	// 启动任务消费（阻塞式订阅，独立 goroutine）
 	go func() { _ = consumer.Start(ctx) }()
 	go func() { _ = approvalSub.Start(ctx) }()
+	go func() { _ = skillInstallConsumer.Start(ctx) }()
 
 	lifecycle.Std().AddCloseFunc(func() error {
 		cancel()

@@ -7,39 +7,57 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
+	"time"
 
 	"gorm.io/gorm"
 
 	"github.com/insmtx/Leros/backend/internal/api/contract"
 	infradb "github.com/insmtx/Leros/backend/internal/infra/db"
+	eventbus "github.com/insmtx/Leros/backend/internal/infra/mq"
 	"github.com/insmtx/Leros/backend/internal/skill/fetch"
+	"github.com/insmtx/Leros/backend/internal/worker/protocol"
+	"github.com/insmtx/Leros/backend/pkg/dm"
 	"github.com/insmtx/Leros/backend/types"
 )
 
 type skillMarketplaceService struct {
-	db *gorm.DB
+	db        *gorm.DB
+	publisher eventbus.Publisher
 }
 
 // NewSkillMarketplaceService 创建 Skill 市场服务。
-func NewSkillMarketplaceService(db *gorm.DB) contract.SkillMarketplaceService {
-	return &skillMarketplaceService{db: db}
+func NewSkillMarketplaceService(db *gorm.DB, publisher eventbus.Publisher) contract.SkillMarketplaceService {
+	return &skillMarketplaceService{db: db, publisher: publisher}
 }
 
 func (s *skillMarketplaceService) SearchSkillMarketplace(ctx context.Context, req *contract.SearchSkillMarketplaceRequest) (*contract.SearchSkillMarketplaceResponse, error) {
-	// 规范化分页
-	if req.Offset < 0 {
-		req.Offset = 0
-	}
 	if req.Limit <= 0 {
-		req.Limit = 20
+		req.Limit = 80
 	}
-	if req.Limit > 100 {
-		req.Limit = 100
+	if req.Limit > 200 {
+		req.Limit = 200
 	}
 
 	// 决定查询哪些源
 	queryBuiltin, queryExternal := s.resolveSources(req.SourceTypes)
+
+	keyword := strings.TrimSpace(req.Keyword)
+	var externalQuery string
+	var skipExternal bool
+
+	if keyword == "" {
+		if req.Category != "" {
+			externalQuery = req.Category
+		} else {
+			externalQuery = "office"
+		}
+	} else if len([]rune(keyword)) < 2 {
+		skipExternal = true
+	} else {
+		externalQuery = keyword
+	}
 
 	var (
 		mu       sync.Mutex
@@ -68,11 +86,11 @@ func (s *skillMarketplaceService) SearchSkillMarketplace(ctx context.Context, re
 	}
 
 	// 外部源（skills.sh）
-	if queryExternal {
+	if queryExternal && !skipExternal {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			metas, err := fetch.NewSkillsShSource().Search(ctx, req.Keyword, req.Limit)
+			metas, err := fetch.NewSkillsShSource().Search(ctx, externalQuery, req.Limit)
 			mu.Lock()
 			defer mu.Unlock()
 			if err != nil {
@@ -90,13 +108,13 @@ func (s *skillMarketplaceService) SearchSkillMarketplace(ctx context.Context, re
 
 	wg.Wait()
 
-	// 分页截取
-	total := int64(len(allItems))
-	items := applyOffsetLimit(allItems, req.Offset, req.Limit)
+	// 首屏聚合：内置源优先，截断至 limit。
+	if len(allItems) > req.Limit {
+		allItems = allItems[:req.Limit]
+	}
 
 	return &contract.SearchSkillMarketplaceResponse{
-		Items:    items,
-		Total:    total,
+		Items:    allItems,
 		Warnings: warnings,
 	}, nil
 }
@@ -161,17 +179,6 @@ func metaToView(meta fetch.SkillMeta) contract.SkillMarketplaceItemView {
 	}
 }
 
-func applyOffsetLimit(items []contract.SkillMarketplaceItemView, offset, limit int) []contract.SkillMarketplaceItemView {
-	if offset >= len(items) {
-		return nil
-	}
-	items = items[offset:]
-	if len(items) > limit {
-		items = items[:limit]
-	}
-	return items
-}
-
 func (s *skillMarketplaceService) DownloadBuiltinSkill(ctx context.Context, skillID string) (*contract.SkillPackageDownload, error) {
 	item, err := infradb.GetBuiltinSkillByID(ctx, s.db, skillID)
 	if err != nil {
@@ -193,7 +200,7 @@ func (s *skillMarketplaceService) DownloadBuiltinSkill(ctx context.Context, skil
 
 	pr, pw := io.Pipe()
 	go func() {
-		_ = pw.CloseWithError(zipSkillDir(ctx, pw, skillDir, skillID))
+		_ = pw.CloseWithError(zipSkillDir(ctx, pw, skillDir))
 	}()
 
 	return &contract.SkillPackageDownload{
@@ -202,7 +209,7 @@ func (s *skillMarketplaceService) DownloadBuiltinSkill(ctx context.Context, skil
 	}, nil
 }
 
-func zipSkillDir(ctx context.Context, w io.Writer, skillDir, skillID string) error {
+func zipSkillDir(ctx context.Context, w io.Writer, skillDir string) error {
 	zw := zip.NewWriter(w)
 	defer zw.Close()
 
@@ -224,7 +231,7 @@ func zipSkillDir(ctx context.Context, w io.Writer, skillDir, skillID string) err
 			return err
 		}
 
-		zipPath := filepath.ToSlash(filepath.Join(skillID, relPath))
+		zipPath := filepath.ToSlash(relPath)
 
 		f, err := zw.Create(zipPath)
 		if err != nil {
@@ -240,6 +247,43 @@ func zipSkillDir(ctx context.Context, w io.Writer, skillDir, skillID string) err
 		file.Close()
 		return err
 	})
+}
+
+func (s *skillMarketplaceService) InstallSkill(ctx context.Context, req *contract.InstallSkillRequest) (*contract.InstallSkillResponse, error) {
+	caller, err := requireCallerOrg(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	workerID := uint(1)
+
+	topic, err := dm.WorkerSkillInstallSubject(caller.OrgID, workerID)
+	if err != nil {
+		return nil, fmt.Errorf("build skill install topic: %w", err)
+	}
+
+	msg := protocol.SkillInstallMessage{
+		ID:        fmt.Sprintf("%d-%d-%d", caller.OrgID, workerID, time.Now().UnixNano()),
+		Type:      protocol.MessageTypeSkillInstall,
+		CreatedAt: time.Now(),
+		Route: protocol.RouteContext{
+			OrgID:    caller.OrgID,
+			WorkerID: workerID,
+		},
+		Body: protocol.SkillInstallBody{
+			Source:  strings.TrimSpace(req.Source),
+			SkillID: strings.TrimSpace(req.SkillID),
+		},
+	}
+
+	if err := s.publisher.Publish(ctx, topic, msg); err != nil {
+		return nil, fmt.Errorf("publish skill install: %w", err)
+	}
+
+	return &contract.InstallSkillResponse{
+		Status:  "accepted",
+		Message: fmt.Sprintf("Skill install request queued for org %d, worker %d", caller.OrgID, workerID),
+	}, nil
 }
 
 var _ contract.SkillMarketplaceService = (*skillMarketplaceService)(nil)

@@ -9,14 +9,13 @@ export interface SkillMarketplaceItem {
   version: string;
   author: string;
   category: string;
-  tags: string[];
+  tags: string[] | null;
   icon: string;
   installs: number;
 }
 
 export interface SearchSkillMarketplaceResponse {
   items: SkillMarketplaceItem[];
-  total: number;
   warnings?: Array<{ source_type: string; message: string }>;
 }
 
@@ -24,17 +23,26 @@ export interface SearchSkillMarketplaceParams {
   keyword?: string;
   category?: string;
   source_types?: string[];
-  offset?: number;
   limit?: number;
+}
+
+export interface InstallSkillParams {
+  source: string;
+  skill_id: string;
+}
+
+export interface InstallSkillResponse {
+  status: string;
+  message: string;
 }
 
 function cleanParams(
   params: SearchSkillMarketplaceParams,
-): Record<string, string | number | boolean> {
-  const result: Record<string, string | number | boolean> = {};
+): Record<string, string | number | boolean | string[]> {
+  const result: Record<string, string | number | boolean | string[]> = {};
   if (params.keyword) result.keyword = params.keyword;
   if (params.category) result.category = params.category;
-  if (params.offset !== undefined) result.offset = params.offset;
+  if (params.source_types?.length) result.source_types = params.source_types;
   if (params.limit !== undefined) result.limit = params.limit;
   return result;
 }
@@ -44,5 +52,11 @@ export const skillMarketplaceApi = {
     apiClient.get<BackendDataResponse<SearchSkillMarketplaceResponse>>(
       "/skill-marketplace/search",
       { params: cleanParams(params) },
+    ),
+
+  install: (params: InstallSkillParams) =>
+    apiClient.post<BackendDataResponse<InstallSkillResponse>>(
+      "/skill-marketplace/install",
+      params,
     ),
 };

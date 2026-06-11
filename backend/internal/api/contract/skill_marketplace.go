@@ -11,10 +11,23 @@ type SkillPackageDownload struct {
 	FileName string
 }
 
+// InstallSkillRequest Skill 安装请求。
+type InstallSkillRequest struct {
+	Source  string `json:"source" binding:"required"`
+	SkillID string `json:"skill_id" binding:"required"`
+}
+
+// InstallSkillResponse Skill 安装响应（异步，仅表示已接受）。
+type InstallSkillResponse struct {
+	Status  string `json:"status"`
+	Message string `json:"message"`
+}
+
 // SkillMarketplaceService 定义 Skill 市场搜索服务接口。
 type SkillMarketplaceService interface {
 	SearchSkillMarketplace(ctx context.Context, req *SearchSkillMarketplaceRequest) (*SearchSkillMarketplaceResponse, error)
 	DownloadBuiltinSkill(ctx context.Context, skillID string) (*SkillPackageDownload, error)
+	InstallSkill(ctx context.Context, req *InstallSkillRequest) (*InstallSkillResponse, error)
 }
 
 // SearchSkillMarketplaceRequest Skill 市场搜索请求。
@@ -22,7 +35,6 @@ type SearchSkillMarketplaceRequest struct {
 	Keyword     string   `form:"keyword" json:"keyword,omitempty"`
 	Category    string   `form:"category" json:"category,omitempty"`
 	SourceTypes []string `form:"source_types" json:"source_types,omitempty"`
-	Offset      int      `form:"offset" json:"offset,omitempty"`
 	Limit       int      `form:"limit" json:"limit,omitempty"`
 }
 
@@ -49,6 +61,5 @@ type SkillSourceWarning struct {
 // SearchSkillMarketplaceResponse Skill 市场搜索响应。
 type SearchSkillMarketplaceResponse struct {
 	Items    []SkillMarketplaceItemView `json:"items"`
-	Total    int64                      `json:"total"`
 	Warnings []SkillSourceWarning       `json:"warnings,omitempty"`
 }

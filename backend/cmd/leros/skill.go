@@ -18,11 +18,21 @@ import (
 )
 
 var (
-	skillJSON     bool
-	skillForce    bool
-	skillYes      bool
-	skillLimit    int
+	skillJSON  bool
+	skillForce bool
+	skillYes   bool
+	skillLimit int
 )
+
+// newSourceRouter 创建包含内置源的 SourceRouter（内置源优先级最高）。
+func newSourceRouter() *fetch.SourceRouter {
+	return fetch.NewSourceRouterWithSources(
+		fetch.NewBuiltinSource(cliServerAddr()),
+		fetch.NewUrlSource(),
+		fetch.NewGitHubSource(),
+		fetch.NewSkillsShSource(),
+	)
+}
 
 // knownCLISkillDirs 外部 CLI skill 目录，安装后创建 symlink 同步。
 var knownCLISkillDirs = []string{
@@ -86,14 +96,12 @@ Identifier formats:
 
 func runInstall(identifier string) error {
 	ctx := context.Background()
-	router := fetch.NewSourceRouter()
+	router := newSourceRouter()
 
-	var bundle *fetch.SkillBundle
-	var err error
-
-	if strings.Contains(identifier, "/") {
-		bundle, err = router.Fetch(ctx, identifier)
-	} else {
+	// 先尝试 Fetch（BuiltinSource.CanHandle 捕获短名，GitHubSource/UrlSource 捕获完整标识符）。
+	bundle, err := router.Fetch(ctx, identifier)
+	if err != nil && !strings.Contains(identifier, "/") {
+		// 短名 Fetch 失败时，回退到按名称搜索所有源。
 		bundle, err = router.ResolveShortName(ctx, identifier)
 	}
 	if err != nil {
@@ -145,7 +153,7 @@ func runInstall(identifier string) error {
 
 func runSearch(query string) error {
 	ctx := context.Background()
-	router := fetch.NewSourceRouter()
+	router := newSourceRouter()
 
 	results, err := router.Search(ctx, query, skillLimit)
 	if err != nil {

@@ -120,12 +120,26 @@ func (r *SourceRouter) Fetch(ctx context.Context, identifier string) (*SkillBund
 	return nil, fmt.Errorf("no source could handle identifier %q", identifier)
 }
 
-// ResolveShortName 对不含 "/" 的短名称，通过 skills.sh 搜索精确匹配后安装。
+// ResolveShortName 对不含 "/" 的短名称，按 source 优先级依次搜索精确匹配后安装。
 func (r *SourceRouter) ResolveShortName(ctx context.Context, name string) (*SkillBundle, error) {
 	if strings.Contains(name, "/") {
 		return nil, fmt.Errorf("ResolveShortName called with identifier containing '/': %s", name)
 	}
 
+	// 按 router 内 source 优先级依次搜索。
+	for _, src := range r.sources {
+		results, err := src.Search(ctx, name, 10)
+		if err != nil {
+			continue
+		}
+		for _, meta := range results {
+			if strings.EqualFold(meta.Name, name) {
+				return r.Fetch(ctx, meta.Identifier)
+			}
+		}
+	}
+
+	// 兜底：直接搜索 skills.sh。
 	skillsSh := NewSkillsShSource()
 	results, err := skillsSh.Search(ctx, name, 10)
 	if err != nil {
