@@ -1,7 +1,10 @@
 package handler
 
 import (
+	"fmt"
+	"io"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -12,6 +15,35 @@ import (
 // RegisterSkillMarketplaceRoutes 注册 Skill 市场相关路由。
 func RegisterSkillMarketplaceRoutes(r gin.IRouter, service contract.SkillMarketplaceService) {
 	r.GET("/skill-marketplace/search", searchSkillMarketplace(service))
+	r.GET("/skill-marketplace/skills/:skill_id/download", downloadBuiltinSkill(service))
+}
+
+func downloadBuiltinSkill(service contract.SkillMarketplaceService) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		skillID := strings.TrimSpace(ctx.Param("skill_id"))
+		if skillID == "" {
+			ctx.JSON(http.StatusBadRequest, dto.Error(dto.CodeInvalidParams, "skill_id is required"))
+			return
+		}
+
+		download, err := service.DownloadBuiltinSkill(ctx, skillID)
+		if err != nil {
+			if err.Error() == "skill not found" {
+				ctx.JSON(http.StatusNotFound, dto.Error(dto.CodeNotFound, err.Error()))
+				return
+			}
+			ctx.JSON(http.StatusInternalServerError, dto.Error(dto.CodeInternalError, err.Error()))
+			return
+		}
+		defer download.Reader.Close()
+
+		ctx.Header("Content-Type", "application/zip")
+		ctx.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, download.FileName))
+		ctx.Status(http.StatusOK)
+		if _, err := io.Copy(ctx.Writer, download.Reader); err != nil {
+			ctx.Error(err)
+		}
+	}
 }
 
 func searchSkillMarketplace(service contract.SkillMarketplaceService) gin.HandlerFunc {

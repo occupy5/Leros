@@ -85,7 +85,7 @@ func SeedBuiltinSkillMarketplace(db *gorm.DB) error {
 		return nil
 	}
 
-	serverDir, err := resolveSkillsServerDir()
+	serverDir, err := ResolveSkillsServerDir()
 	if err != nil {
 		return fmt.Errorf("resolve skills server dir: %w", err)
 	}
@@ -158,9 +158,9 @@ func SeedBuiltinSkillMarketplace(db *gorm.DB) error {
 // 辅助函数
 // ================================================================================
 
-// resolveSkillsServerDir 解析 backend/skills/server/ 目录路径。
+// ResolveSkillsServerDir 解析 backend/skills/server/ 目录路径。
 // 从工作目录开始向上查找，兜底 /app/backend/skills/server/（Docker 环境）。
-func resolveSkillsServerDir() (string, error) {
+func ResolveSkillsServerDir() (string, error) {
 	relPath := filepath.Join("backend", "skills", "server")
 
 	if wd, err := os.Getwd(); err == nil {

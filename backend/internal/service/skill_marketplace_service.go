@@ -1,7 +1,12 @@
 package service
 
 import (
+	"archive/zip"
 	"context"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
 	"sync"
 
 	"gorm.io/gorm"
@@ -34,7 +39,7 @@ func (s *skillMarketplaceService) SearchSkillMarketplace(ctx context.Context, re
 	}
 
 	// 决定查询哪些源
-	queryBuiltin, queryExternal := s.resolveSources(req.SourceCodes)
+	queryBuiltin, queryExternal := s.resolveSources(req.SourceTypes)
 
 	var (
 		mu       sync.Mutex
@@ -53,7 +58,7 @@ func (s *skillMarketplaceService) SearchSkillMarketplace(ctx context.Context, re
 			defer mu.Unlock()
 			if err != nil {
 				warnings = append(warnings, contract.SkillSourceWarning{
-					SourceCode: "leros_builtin",
+					SourceType: "Leros",
 					Message:    err.Error(),
 				})
 			} else {
@@ -72,7 +77,7 @@ func (s *skillMarketplaceService) SearchSkillMarketplace(ctx context.Context, re
 			defer mu.Unlock()
 			if err != nil {
 				warnings = append(warnings, contract.SkillSourceWarning{
-					SourceCode: "skills-sh",
+					SourceType: "Skills.sh",
 					Message:    err.Error(),
 				})
 			} else {
@@ -96,16 +101,16 @@ func (s *skillMarketplaceService) SearchSkillMarketplace(ctx context.Context, re
 	}, nil
 }
 
-// resolveSources 根据 source_codes 决定查询哪些源。
-func (s *skillMarketplaceService) resolveSources(sourceCodes []string) (builtin, external bool) {
-	if len(sourceCodes) == 0 {
+// resolveSources 根据 source_types 决定查询哪些源。
+func (s *skillMarketplaceService) resolveSources(sourceTypes []string) (builtin, external bool) {
+	if len(sourceTypes) == 0 {
 		return true, true
 	}
-	for _, code := range sourceCodes {
-		switch code {
-		case "leros_builtin":
+	for _, t := range sourceTypes {
+		switch t {
+		case "Leros":
 			builtin = true
-		case "skills-sh":
+		case "Skills.sh":
 			external = true
 		}
 	}
@@ -128,9 +133,7 @@ func (s *skillMarketplaceService) searchBuiltin(ctx context.Context, keyword, ca
 
 func builtinItemToView(item types.BuiltinSkillMarketplaceItem) contract.SkillMarketplaceItemView {
 	return contract.SkillMarketplaceItemView{
-		SourceCode:  "leros_builtin",
-		SourceName:  "Leros 内置",
-		SourceType:  "builtin",
+		SourceType:  "Leros",
 		SkillID:     item.SkillID,
 		Name:        item.Name,
 		Description: item.Description,
@@ -144,14 +147,8 @@ func builtinItemToView(item types.BuiltinSkillMarketplaceItem) contract.SkillMar
 }
 
 func metaToView(meta fetch.SkillMeta) contract.SkillMarketplaceItemView {
-	sourceType := "builtin"
-	if meta.Source != "leros_builtin" {
-		sourceType = "external"
-	}
 	return contract.SkillMarketplaceItemView{
-		SourceCode:  meta.Source,
-		SourceName:  meta.Source,
-		SourceType:  sourceType,
+		SourceType:  meta.Source,
 		SkillID:     meta.SkillID,
 		Name:        meta.Name,
 		Description: meta.Description,
@@ -173,6 +170,76 @@ func applyOffsetLimit(items []contract.SkillMarketplaceItemView, offset, limit i
 		items = items[:limit]
 	}
 	return items
+}
+
+func (s *skillMarketplaceService) DownloadBuiltinSkill(ctx context.Context, skillID string) (*contract.SkillPackageDownload, error) {
+	item, err := infradb.GetBuiltinSkillByID(ctx, s.db, skillID)
+	if err != nil {
+		return nil, err
+	}
+	if item == nil {
+		return nil, fmt.Errorf("skill not found")
+	}
+
+	serverDir, err := infradb.ResolveSkillsServerDir()
+	if err != nil {
+		return nil, fmt.Errorf("resolve skills server dir: %w", err)
+	}
+
+	skillDir := filepath.Join(serverDir, skillID)
+	if _, err := os.Stat(filepath.Join(skillDir, "SKILL.md")); os.IsNotExist(err) {
+		return nil, fmt.Errorf("skill not found")
+	}
+
+	pr, pw := io.Pipe()
+	go func() {
+		_ = pw.CloseWithError(zipSkillDir(ctx, pw, skillDir, skillID))
+	}()
+
+	return &contract.SkillPackageDownload{
+		Reader:   pr,
+		FileName: skillID + ".zip",
+	}, nil
+}
+
+func zipSkillDir(ctx context.Context, w io.Writer, skillDir, skillID string) error {
+	zw := zip.NewWriter(w)
+	defer zw.Close()
+
+	return filepath.Walk(skillDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		relPath, err := filepath.Rel(skillDir, path)
+		if err != nil {
+			return err
+		}
+
+		zipPath := filepath.ToSlash(filepath.Join(skillID, relPath))
+
+		f, err := zw.Create(zipPath)
+		if err != nil {
+			return err
+		}
+
+		file, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+
+		_, err = io.Copy(f, file)
+		file.Close()
+		return err
+	})
 }
 
 var _ contract.SkillMarketplaceService = (*skillMarketplaceService)(nil)
