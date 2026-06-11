@@ -314,6 +314,69 @@ func TestEnsureExternalSkillLinkRejectsEmptyName(t *testing.T) {
 	}
 }
 
+func TestRemoveExternalSkillLinkRemovesSymlink(t *testing.T) {
+	workspaceRoot := t.TempDir()
+	t.Setenv(leros.EnvWorkspaceRoot, workspaceRoot)
+
+	lerosSkills := filepath.Join(workspaceRoot, ".leros", "skills")
+	writeSyncTestSkill(t, filepath.Join(lerosSkills, "review-flow"), "review-flow", "test body")
+
+	externalDir := t.TempDir()
+
+	// Create symlink first via EnsureExternalSkillLink.
+	if err := EnsureExternalSkillLink("review-flow", []string{externalDir}); err != nil {
+		t.Fatalf("EnsureExternalSkillLink: %v", err)
+	}
+	// Verify symlink was created.
+	if _, err := os.Lstat(filepath.Join(externalDir, "review-flow")); err != nil {
+		t.Fatalf("symlink should exist: %v", err)
+	}
+
+	// Remove the symlink.
+	if err := RemoveExternalSkillLink("review-flow", []string{externalDir}); err != nil {
+		t.Fatalf("RemoveExternalSkillLink: %v", err)
+	}
+
+	// Verify symlink was removed.
+	if _, err := os.Lstat(filepath.Join(externalDir, "review-flow")); !os.IsNotExist(err) {
+		t.Fatalf("symlink should be removed, got: %v", err)
+	}
+}
+
+func TestRemoveExternalSkillLinkNoopsOnMissing(t *testing.T) {
+	externalDir := t.TempDir()
+
+	// Remove non-existent symlink should not error.
+	if err := RemoveExternalSkillLink("nonexistent", []string{externalDir}); err != nil {
+		t.Fatalf("RemoveExternalSkillLink should not error on missing: %v", err)
+	}
+}
+
+func TestRemoveExternalSkillLinkPreservesRealDirectory(t *testing.T) {
+	externalDir := t.TempDir()
+	realDir := filepath.Join(externalDir, "my-skill")
+	if err := os.MkdirAll(realDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	// RemoveExternalSkillLink should not touch a real directory.
+	if err := RemoveExternalSkillLink("my-skill", []string{externalDir}); err != nil {
+		t.Fatalf("RemoveExternalSkillLink: %v", err)
+	}
+
+	// Verify real directory still exists.
+	fi, err := os.Lstat(filepath.Join(externalDir, "my-skill"))
+	if err != nil {
+		t.Fatalf("real directory should still exist: %v", err)
+	}
+	if fi.Mode()&os.ModeSymlink != 0 {
+		t.Fatal("expected real directory, not symlink")
+	}
+	if !fi.IsDir() {
+		t.Fatal("expected directory")
+	}
+}
+
 func writeSyncTestSkill(t *testing.T, dir string, name string, body string) {
 	t.Helper()
 	if err := os.MkdirAll(dir, 0o755); err != nil {

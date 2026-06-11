@@ -165,6 +165,45 @@ func EnsureExternalSkillLink(skillName string, cliSkillDirs []string) error {
 	return nil
 }
 
+// RemoveExternalSkillLink removes external symlinks for a single skill from all CLI directories.
+// Only symlinks are removed; real directories or files are left untouched.
+// Logs warnings on failures but continues to the next directory (same pattern as EnsureExternalSkillLink).
+// No-op if the symlink does not exist.
+func RemoveExternalSkillLink(skillName string, cliSkillDirs []string) error {
+	if strings.TrimSpace(skillName) == "" {
+		return fmt.Errorf("skill name is required")
+	}
+	if strings.ContainsAny(skillName, "/\\") || filepath.IsAbs(skillName) || skillName == ".." {
+		return fmt.Errorf("invalid skill name %q: must not contain path separators or be absolute", skillName)
+	}
+
+	for _, cliDir := range cliSkillDirs {
+		resolvedCliDir, err := expandPath(cliDir)
+		if err != nil {
+			logs.Warnf("Failed to resolve CLI skill directory %s: %v", cliDir, err)
+			continue
+		}
+		targetPath := filepath.Join(resolvedCliDir, skillName)
+		fi, err := os.Lstat(targetPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue // Nothing to remove, no-op
+			}
+			logs.Warnf("Failed to stat external symlink %s: %v", targetPath, err)
+			continue
+		}
+		// Only remove symlinks, never real directories or regular files.
+		if fi.Mode()&os.ModeSymlink == 0 {
+			continue
+		}
+		if err := os.Remove(targetPath); err != nil {
+			logs.Warnf("Failed to remove external symlink %s: %v", targetPath, err)
+			continue
+		}
+	}
+	return nil
+}
+
 // resolveBuiltinSkillsSource resolves the built-in skills directory from various sources.
 // Priority: 1. sourceDir param, 2. LEROS_SKILLS_DIR env, 3. default locations.
 func resolveBuiltinSkillsSource(sourceDir string) (string, error) {

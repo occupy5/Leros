@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/insmtx/Leros/backend/engines"
+	skillcatalog "github.com/insmtx/Leros/backend/internal/skill/catalog"
 	"github.com/insmtx/Leros/backend/internal/skill/fetch"
 	skillstore "github.com/insmtx/Leros/backend/internal/skill/store"
 	"github.com/insmtx/Leros/backend/pkg/leros"
@@ -61,6 +62,16 @@ Identifier formats:
 		},
 	}
 
+	listCmd := &cobra.Command{
+		Use:   "list",
+		Short: "List installed skills",
+		Long:  `List skills installed in the local workspace.`,
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runList()
+		},
+	}
+
 	cmd.PersistentFlags().BoolVar(&skillJSON, "json", false, "Output in JSON format")
 
 	installCmd.Flags().BoolVar(&skillForce, "force", false, "Overwrite existing skill")
@@ -69,7 +80,7 @@ Identifier formats:
 	searchCmd.Flags().IntVar(&skillLimit, "limit", 10, "Maximum number of results")
 	searchCmd.Flags().BoolVar(&skillJSON, "json", false, "Output in JSON format")
 
-	cmd.AddCommand(installCmd, searchCmd)
+	cmd.AddCommand(installCmd, searchCmd, listCmd)
 	return cmd
 }
 
@@ -167,6 +178,54 @@ func runSearch(query string) error {
 	w.Flush()
 
 	fmt.Fprintf(os.Stderr, "\nFound %d result(s).\n", len(results))
+	return nil
+}
+
+func runList() error {
+	summaries, err := skillcatalog.List()
+	if err != nil {
+		return fmt.Errorf("list skills: %w", err)
+	}
+
+	if skillJSON {
+		type listItem struct {
+			Name        string `json:"name"`
+			Description string `json:"description"`
+			Category    string `json:"category"`
+			Source      string `json:"source"`
+			Trust       string `json:"trust"`
+		}
+		items := make([]listItem, 0, len(summaries))
+		for _, s := range summaries {
+			items = append(items, listItem{
+				Name:        s.Name,
+				Description: s.Description,
+				Category:    s.Category,
+				Source:      s.Source,
+				Trust:       s.Trust,
+			})
+		}
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		if items == nil {
+			items = []listItem{}
+		}
+		return enc.Encode(items)
+	}
+
+	if len(summaries) == 0 {
+		fmt.Println("No skills installed.")
+		return nil
+	}
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
+	fmt.Fprintln(w, "NAME\tCATEGORY\tSOURCE\tTRUST")
+	for _, s := range summaries {
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", s.Name, s.Category, s.Source, s.Trust)
+	}
+	w.Flush()
+
+	fmt.Fprintf(os.Stderr, "\n%d skill(s) installed.\n", len(summaries))
 	return nil
 }
 
