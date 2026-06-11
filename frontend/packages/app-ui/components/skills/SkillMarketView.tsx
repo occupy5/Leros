@@ -26,7 +26,6 @@ export function SkillMarketView() {
   const [debouncedKeyword, setDebouncedKeyword] = useState("");
   const [activeCategory, setActiveCategory] = useState("");
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const offsetRef = useRef(0);
   const loadingRef = useRef(false);
 
   const [installingIds, setInstallingIds] = useState<Set<string>>(new Set());
