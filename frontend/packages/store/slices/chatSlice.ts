@@ -741,22 +741,11 @@ export class ChatActionImpl {
 				role: "user",
 				content,
 				message_type: "text",
-				metadata:
-					attachments && attachments.length > 0
-						? {
-								file_name: attachments[0]?.name,
-								file_url: attachments[0]?.path || attachments[0]?.url,
-								extra: {
-									attachments: attachments.map((attachment) => ({
-										name: attachment.name,
-										path: attachment.path,
-										url: attachment.url,
-										size: attachment.size,
-										mime_type: attachment.mimeType,
-									})),
-								},
-							}
-						: undefined,
+				attachments: attachments?.map((attachment) => ({
+					url: attachment.path || attachment.url || "",
+					name: attachment.name,
+					type: attachment.mimeType || attachment.file?.type || "application/octet-stream",
+				})),
 			});
 		} catch (err) {
 			console.error("sendMessage addMessage error:", err);

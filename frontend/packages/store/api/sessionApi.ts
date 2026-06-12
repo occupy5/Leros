@@ -57,8 +57,15 @@ export type AddMessageParams = {
 	role: string;
 	content: string;
 	message_type?: string;
+	attachments?: {
+		url: string;
+		name: string;
+		type: string;
+	}[];
 	thinking?: string;
 	metadata?: {
+		source?: string;
+		tags?: string[];
 		model?: string;
 		tokens?: number;
 		latency?: number;
@@ -67,6 +74,11 @@ export type AddMessageParams = {
 		file_name?: string;
 		language?: string;
 		extra?: Record<string, unknown>;
+	};
+	usage?: {
+		prompt_tokens: number;
+		completion_tokens: number;
+		total_tokens: number;
 	};
 	tool_calls?: {
 		id: string;
