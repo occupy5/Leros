@@ -172,6 +172,53 @@ function mapOutgoingAttachments(
 	return mapped?.length ? mapped : undefined;
 }
 
+function escapeRegExp(value: string): string {
+	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function normalizeSkillDirectiveName(skillName: string): string {
+	return skillName.trim().replace(/^\/+/, "");
+}
+
+function appendSkillDirectiveToInput(inputText: string, skillName: string): string {
+	const normalizedName = normalizeSkillDirectiveName(skillName);
+	if (!normalizedName) return inputText;
+
+	const token = `/${normalizedName}`;
+	const tokenPattern = new RegExp(`(^|\\s)${escapeRegExp(token)}(?=\\s|$)`);
+	const trimmed = inputText.trimStart();
+	if (tokenPattern.test(trimmed)) {
+		return trimmed.endsWith(" ") ? trimmed : `${trimmed} `;
+	}
+
+	const directivePrefixMatch = trimmed.match(/^((?:\/[^\s/]+\s+)*)/);
+	const directivePrefix = directivePrefixMatch?.[0] ?? "";
+	const rest = trimmed.slice(directivePrefix.length);
+	const nextDirectivePrefix = directivePrefix
+		? `${directivePrefix.trimEnd()} ${token} `
+		: `${token} `;
+
+	return `${nextDirectivePrefix}${rest}`;
+}
+
+function replaceSkillDirectiveInInput(inputText: string, skillName: string): string {
+	const normalizedName = normalizeSkillDirectiveName(skillName);
+	if (!normalizedName) return inputText;
+
+	const token = `/${normalizedName}`;
+	const trimmed = inputText.trimStart();
+	const rest = trimmed.replace(/^(?:\/[^\s/]+\s+)*/, "");
+	return rest ? `${token} ${rest}` : `${token} `;
+}
+
+function revokeLocalAttachmentUrls(attachments: Attachment[]) {
+	for (const attachment of attachments) {
+		if (attachment.url?.startsWith("blob:")) {
+			URL.revokeObjectURL(attachment.url);
+		}
+	}
+}
+
 function mapToolCalls(tcList?: BackendToolCall[]): ToolCall[] | undefined {
 	if (!tcList) return undefined;
 	return tcList.map((tc) => ({
@@ -1224,6 +1271,24 @@ export class ChatActionImpl {
 
 	setInputText = (text: string) => {
 		this.#set({ inputText: text });
+	};
+
+	clearComposerInput = () => {
+		const state = this.#get();
+		revokeLocalAttachmentUrls(state.inputAttachments);
+		this.#set({ inputText: "", inputAttachments: [] });
+	};
+
+	appendSkillDirective = (skillName: string) => {
+		this.#set((state) => ({
+			inputText: appendSkillDirectiveToInput(state.inputText, skillName),
+		}));
+	};
+
+	replaceSkillDirective = (skillName: string) => {
+		this.#set((state) => ({
+			inputText: replaceSkillDirectiveInInput(state.inputText, skillName),
+		}));
 	};
 
 	addAttachment = (file: File) => {
